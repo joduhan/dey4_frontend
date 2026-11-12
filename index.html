@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>전국 날씨 · 미세먼지 지도</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="card">
+    <h1>전국 날씨 · 미세먼지 지도</h1>
+
+    <form id="search-form">
+      <div class="search-box">
+        <input id="city-input" type="text" placeholder="지역 입력 (예: 서, 부산, 제주)" autocomplete="off" />
+        <ul id="suggestions" class="suggestions" hidden></ul>
+      </div>
+      <button type="submit">검색</button>
+    </form>
+
+    <div id="status" class="status" role="status"></div>
+
+    <div class="layout">
+      <section class="map-wrap">
+        <div class="map-tools">
+          <span>마커 색상</span>
+          <label><input type="radio" name="metric" value="pm10" checked /> 미세먼지(PM10)</label>
+          <label><input type="radio" name="metric" value="pm2_5" /> 초미세먼지(PM2.5)</label>
+        </div>
+        <div id="map"></div>
+        <div class="legend">
+          <span><i style="background:#2f80ed"></i>좋음</span>
+          <span><i style="background:#27ae60"></i>보통</span>
+          <span><i style="background:#f2994a"></i>나쁨</span>
+          <span><i style="background:#eb5757"></i>매우나쁨</span>
+        </div>
+        <p class="hint">지도의 아무 곳이나 클릭하면 그 지점의 날씨와 미세먼지를 보여줍니다.</p>
+      </section>
+
+      <section id="weather" class="weather" hidden>
+        <div class="place" id="place"></div>
+        <div class="main">
+          <span class="icon" id="icon"></span>
+          <span class="temp" id="temp"></span>
+        </div>
+        <div class="desc" id="desc"></div>
+        <dl class="details">
+          <div><dt>미세먼지 PM10</dt><dd id="pm10"></dd></div>
+          <div><dt>초미세먼지 PM2.5</dt><dd id="pm25"></dd></div>
+          <div><dt>체감온도</dt><dd id="feels"></dd></div>
+          <div><dt>습도</dt><dd id="humidity"></dd></div>
+          <div><dt>풍속</dt><dd id="wind"></dd></div>
+          <div><dt>강수량</dt><dd id="precip"></dd></div>
+        </dl>
+        <div class="updated" id="updated"></div>
+        <div class="updated">미세먼지는 측정값이 아닌 대기질 모델(CAMS) 값입니다.</div>
+      </section>
+    </div>
+  </main>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+  <script src="regions.js"></script>
+  <script src="app.js"></script>
+  <script src="map.js"></script>
+</body>
+</html>
