@@ -5,7 +5,7 @@
 // GEMINI_API_KEY 는 서버 환경변수로만 사용되며 브라우저로 나가지 않는다.
 const { TOOLS, TOOL_DECLARATIONS } = require("./_lib");
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 const MAX_STEPS = 6;     // 도구 호출 반복 상한
 const MAX_HISTORY = 12;  // 대화 기록 상한
 const MAX_TEXT = 1000;   // 메시지 길이 상한
@@ -39,7 +39,7 @@ async function callGemini(key, contents) {
       systemInstruction: { parts: [{ text: SYSTEM }] },
       contents,
       tools: [{ functionDeclarations: TOOL_DECLARATIONS }],
-      generationConfig: { temperature: 0.5 },
+      // temperature 는 기본값 사용 (Gemini 3 계열은 낮추면 도구 호출 루프가 불안정해질 수 있음)
     }),
   });
   const data = await res.json().catch(() => ({}));
