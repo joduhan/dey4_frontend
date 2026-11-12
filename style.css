@@ -142,3 +142,4 @@ h1 { margin: 0 0 18px; font-size: 1.4rem; text-align: center; }
 #chat-input { flex: 1; padding: 10px 12px; border: 1px solid #c8d0da; border-radius: 10px; font-size: 1rem; }
 #chat-form button { padding: 10px 18px; border: 0; border-radius: 10px; background: #1e6fe0; color: #fff; font-size: 1rem; cursor: pointer; }
 #chat-form button:disabled { background: #9db9e3; cursor: wait; }
+.model-tag { margin-top: 6px; font-size: 0.72rem; color: #9aa4b2; }

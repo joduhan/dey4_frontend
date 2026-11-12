@@ -67,7 +67,10 @@ async function send(text) {
     }
 
     pending.className = "msg model";
-    pending.innerHTML = toolChips(data.toolCalls) + `<div>${renderText(data.reply)}</div>`;
+    pending.innerHTML =
+      toolChips(data.toolCalls) +
+      `<div>${renderText(data.reply)}</div>` +
+      (data.model ? `<div class="model-tag">모델: ${escapeHtml(data.model)}</div>` : "");
     history.push({ role: "model", text: data.reply });
     if (data.spots?.length) window.mapApi?.showSpots(data.spots);
     // 가장 마지막에 조회한 날씨 지점으로 오른쪽 카드도 갱신하지는 않고, 지도에는 추천 장소만 표시
