@@ -57,6 +57,11 @@ async function geocode(name) {
   const kakaoKey = process.env.KAKAO_REST_API_KEY;
   if (kakaoKey) {
     try {
+      // 구·동 같은 행정구역 이름은 주소 검색이 정확하다 ("서울 강남" → 강남구).
+      // 키워드 검색만 쓰면 "서울 강남"이 선릉·정릉 같은 엉뚱한 명소로 잡힌다.
+      const addr = await kakaoGet("address", { query: q, size: 1 }, kakaoKey).catch(() => null);
+      const a = addr?.documents?.[0];
+      if (a) return { name: a.address_name || q, lat: Number(a.y), lon: Number(a.x) };
       const data = await kakaoGet("keyword", { query: q, size: 1 }, kakaoKey);
       const d = data.documents?.[0];
       if (d) return { name: d.place_name, lat: Number(d.y), lon: Number(d.x) };
@@ -165,6 +170,7 @@ async function searchKakao(center, cat, n, key) {
     spots.push({
       name: d.place_name,
       type: (d.category_name || "").split(" > ").pop(),
+      description: d.category_name || undefined, // 카카오가 준 분류만 설명으로 사용 (지어낸 설명 방지)
       lat: Number(d.y),
       lon: Number(d.x),
       distance_km: d.distance ? Math.round(Number(d.distance) / 100) / 10 : Math.round(distKm(center.lat, center.lon, Number(d.y), Number(d.x)) * 10) / 10,
