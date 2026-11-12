@@ -57,7 +57,14 @@ async function send(text) {
       body: JSON.stringify({ messages: history }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `서버 오류 (${res.status})`);
+    if (!res.ok) {
+      throw new Error(
+        data.error ||
+          (res.status === 504
+            ? "서버 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요."
+            : `서버 오류 (${res.status})`)
+      );
+    }
 
     pending.className = "msg model";
     pending.innerHTML = toolChips(data.toolCalls) + `<div>${renderText(data.reply)}</div>`;

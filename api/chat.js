@@ -9,6 +9,9 @@ const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 const MAX_STEPS = 6;     // 도구 호출 반복 상한
 const MAX_HISTORY = 12;  // 대화 기록 상한
 const MAX_TEXT = 1000;   // 메시지 길이 상한
+// 함수 전체 시간 예산(ms). vercel.json 의 maxDuration(60초)보다 짧게 잡아, 플랫폼 504 대신 원인이 보이는 오류를 돌려준다.
+const BUDGET_MS = Number(process.env.CHAT_BUDGET_MS) || 50000;
+const CALL_TIMEOUT_MS = 40000; // Gemini 호출 1회 상한
 
 const SYSTEM = `너는 한국 여행·나들이 추천 에이전트다. 두 가지 도구를 가지고 있다.
 - get_weather: 지역의 실시간 날씨와 미세먼지 조회
@@ -31,18 +34,35 @@ function summarize(name, result) {
   return "";
 }
 
-async function callGemini(key, contents) {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM }] },
-      contents,
-      tools: [{ functionDeclarations: TOOL_DECLARATIONS }],
-      // temperature 는 기본값 사용 (Gemini 3 계열은 낮추면 도구 호출 루프가 불안정해질 수 있음)
-    }),
-  });
-  const data = await res.json().catch(() => ({}));
+async function callGemini(key, contents, timeoutMs) {
+  const post = async (withThinking) => {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        signal: ctl.signal,
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM }] },
+          contents,
+          tools: [{ functionDeclarations: TOOL_DECLARATIONS }],
+          // 생각(thinking) 수준을 낮춰 응답 지연을 줄인다. temperature 는 기본값 사용(Gemini 3 권장).
+          ...(withThinking ? { generationConfig: { thinkingConfig: { thinkingLevel: "low" } } } : {}),
+        }),
+      });
+      return { res, data: await res.json().catch(() => ({})) };
+    } catch (e) {
+      if (e.name === "AbortError") throw new Error(`Gemini 응답이 ${Math.round(timeoutMs / 1000)}초 안에 오지 않았습니다 (모델: ${MODEL})`);
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  let { res, data } = await post(true);
+  // 모델이 thinking 설정을 지원하지 않으면 설정 없이 한 번 더 시도
+  if (res.status === 400 && /think/i.test(data.error?.message || "")) ({ res, data } = await post(false));
   if (!res.ok) throw new Error(data.error?.message || `Gemini HTTP ${res.status}`);
   return data;
 }
@@ -74,8 +94,13 @@ module.exports = async (req, res) => {
   const toolCalls = [];
   const spots = [];
   try {
+    const deadline = Date.now() + BUDGET_MS;
     for (let step = 0; step < MAX_STEPS; step++) {
-      const data = await callGemini(key, contents);
+      const remaining = deadline - Date.now();
+      if (remaining < 6000) {
+        return res.status(504).json({ error: "응답 시간이 부족해 중단했습니다. 질문을 더 짧게 하거나 잠시 후 다시 시도해 주세요.", toolCalls, spots });
+      }
+      const data = await callGemini(key, contents, Math.min(CALL_TIMEOUT_MS, remaining - 2000));
       const cand = data.candidates?.[0];
       if (!cand?.content) {
         const why = data.promptFeedback?.blockReason || cand?.finishReason || "빈 응답";
