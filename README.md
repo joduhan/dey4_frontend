@@ -25,7 +25,7 @@
 1. 이 저장소를 Vercel 에서 Import (Framework Preset: **Other**, 빌드 설정 없음)
 2. Settings → Environment Variables
    - `GEMINI_API_KEY` (필수) — https://aistudio.google.com/apikey
-   - `GEMINI_MODEL` (선택, 기본 `gemini-3.8-flash`; 응답이 없으면 `GEMINI_FALLBACK_MODELS` 순서로 자동 전환)
+   - `GEMINI_MODEL` (선택, 기본 `gemini-3.1-flash-lite`; 응답이 없으면 `GEMINI_FALLBACK_MODELS` 순서로 자동 전환)
    - `KAKAO_REST_API_KEY` (권장) — https://developers.kakao.com → 내 애플리케이션 → 앱 만들기 → 앱 키 → **REST API 키**
      (403 이 나면 앱 설정에서 '카카오맵' 사용 설정이 켜져 있는지 확인)
 3. 환경변수 추가 후 **Redeploy**

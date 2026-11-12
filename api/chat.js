@@ -7,7 +7,7 @@ const { TOOLS, TOOL_DECLARATIONS } = require("./_lib");
 
 // 첫 모델이 응답하지 않거나(시간 초과) 제공 종료·과부하면 다음 모델로 자동 전환한다.
 const MODELS = [
-  process.env.GEMINI_MODEL || "gemini-3.8-flash",
+  process.env.GEMINI_MODEL || "gemini-3.1-flash-lite",
   ...(process.env.GEMINI_FALLBACK_MODELS ?? "gemini-flash-latest,gemini-flash-lite-latest")
     .split(",").map((m) => m.trim()).filter(Boolean),
 ];
@@ -56,7 +56,7 @@ async function callModel(key, model, contents, timeoutMs) {
           contents,
           tools: [{ functionDeclarations: TOOL_DECLARATIONS }],
           // 생각(thinking) 수준을 낮춰 응답 지연을 줄인다. temperature 는 기본값 사용(Gemini 3 권장).
-          ...(withThinking ? { generationConfig: { thinkingConfig: { thinkingLevel: "low" } } } : {}),
+          ...(withThinking ? { generationConfig: { thinkingConfig: { thinkingLevel: process.env.GEMINI_THINKING_LEVEL || "low" } } } : {}),
         }),
       });
       return { res, data: await res.json().catch(() => ({})) };
@@ -99,6 +99,26 @@ async function callGemini(key, contents, deadline) {
   throw new Error(errors.length ? errors.join(" → ") : "응답 시간이 부족합니다");
 }
 
+// 모델이 시간 내에 답을 못 줄 때, 이미 조회한 도구 결과만으로 간단한 답을 만든다.
+function fallbackReply(results) {
+  const lines = [];
+  for (const { name, result } of results) {
+    if (result.error) continue;
+    if (name === "get_weather") {
+      lines.push(
+        `**${result.location}** 현재 ${result.temperature_c}°C, ${result.condition}. ` +
+          `미세먼지 PM10 ${result.pm10 ?? "-"}${result.pm10_grade ? `(${result.pm10_grade})` : ""}, ` +
+          `초미세먼지 PM2.5 ${result.pm2_5 ?? "-"}${result.pm2_5_grade ? `(${result.pm2_5_grade})` : ""}.`
+      );
+    } else if (name === "find_spots" && Array.isArray(result.spots) && result.spots.length) {
+      lines.push(`${result.area} 주변 추천 장소:`);
+      result.spots.slice(0, 6).forEach((s) => lines.push(`* **${s.name}** — ${s.description || s.type || ""}`));
+    }
+  }
+  if (!lines.length) return null;
+  return lines.join("\n") + "\n\n(AI 응답이 늦어 조회 결과만 정리했어요.)";
+}
+
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -125,14 +145,27 @@ module.exports = async (req, res) => {
 
   const toolCalls = [];
   const spots = [];
+  const results = []; // {name, result}
+  const timings = []; // 모델 호출별 소요 시간 진단용
+  const deadline = Date.now() + BUDGET_MS;
+  const partial = (why) => {
+    const reply = fallbackReply(results);
+    return reply ? { reply, toolCalls, spots, model: `자동 요약 (${why})` } : null;
+  };
   try {
-    const deadline = Date.now() + BUDGET_MS;
     let usedModel = null;
     for (let step = 0; step < MAX_STEPS; step++) {
       if (deadline - Date.now() < 6000) {
-        return res.status(504).json({ error: "응답 시간이 부족해 중단했습니다. 질문을 더 짧게 하거나 잠시 후 다시 시도해 주세요.", toolCalls, spots });
+        const p = partial("시간 부족");
+        if (p) return res.status(200).json(p);
+        return res.status(504).json({
+          error: `응답 시간이 부족해 중단했습니다. (모델 호출: ${timings.join(", ") || "없음"}) 잠시 후 다시 시도해 주세요.`,
+          toolCalls, spots,
+        });
       }
+      const t0 = Date.now();
       const { data, model } = await callGemini(key, contents, deadline);
+      timings.push(`${model} ${((Date.now() - t0) / 1000).toFixed(1)}초`);
       usedModel = model;
       const cand = data.candidates?.[0];
       if (!cand?.content) {
@@ -158,6 +191,7 @@ module.exports = async (req, res) => {
           } catch (e) {
             result = { error: `도구 실행 실패: ${e.message}` };
           }
+          results.push({ name, result });
           toolCalls.push({ name, args: args || {}, ok: !result.error, summary: summarize(name, result) });
           if (name === "find_spots" && Array.isArray(result.spots)) {
             spots.push(...result.spots.map((s) => ({ ...s, category: result.category })));
@@ -169,7 +203,9 @@ module.exports = async (req, res) => {
     }
     return res.status(200).json({ reply: "도구 호출이 너무 많아 중단했습니다. 질문을 조금 더 구체적으로 해 주세요.", toolCalls, spots });
   } catch (e) {
-    console.error(e);
-    return res.status(502).json({ error: `에이전트 오류: ${e.message}` });
+    console.error(e, timings);
+    const p = partial("모델 오류");
+    if (p) return res.status(200).json(p);
+    return res.status(502).json({ error: `에이전트 오류: ${e.message}${timings.length ? ` (완료된 호출: ${timings.join(", ")})` : ""}` });
   }
 };

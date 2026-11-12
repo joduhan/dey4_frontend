@@ -60,15 +60,16 @@ async function loadOverview() {
   const lon = pts.map((r) => r[3]).join(",");
   try {
     const [w, a] = await Promise.all([
-      fetch(`${WEATHER_URL}?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`).then((r) => r.json()),
-      fetch(`${AIR_URL}?latitude=${lat}&longitude=${lon}&current=pm10,pm2_5&timezone=auto`).then((r) => r.json()),
+      cachedJson(`${WEATHER_URL}?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`, 4 * 60 * 1000),
+      // 미세먼지가 한도(429) 등으로 실패해도 날씨 마커는 그린다
+      cachedJson(`${AIR_URL}?latitude=${lat}&longitude=${lon}&current=pm10,pm2_5&timezone=auto`, AIR_TTL).catch(() => null),
     ]);
     overview = pts.map((r, i) => ({
       name: r[0], lat: r[2], lon: r[3],
       temp: w[i].current.temperature_2m,
       code: w[i].current.weather_code,
-      pm10: a[i].current.pm10,
-      pm2_5: a[i].current.pm2_5,
+      pm10: a?.[i]?.current?.pm10 ?? null,
+      pm2_5: a?.[i]?.current?.pm2_5 ?? null,
     }));
     drawOverview();
   } catch {

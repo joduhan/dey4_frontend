@@ -113,11 +113,29 @@ async function fetchWeather({ latitude, longitude }) {
   return { current: data.current, units: data.current_units };
 }
 
+// Open-Meteo 는 IP당 호출 한도가 있어(429), 응답을 localStorage 에 캐시한다.
+// 캐시가 신선하면 네트워크를 쓰지 않고, 요청이 실패하면 오래된 캐시라도 사용한다.
+async function cachedJson(url, ttlMs) {
+  const key = "om:" + url;
+  let hit = null;
+  try { hit = JSON.parse(localStorage.getItem(key)); } catch {}
+  if (hit && Date.now() - hit.t < ttlMs) return hit.d;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const d = await res.json();
+    try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), d })); } catch {}
+    return d;
+  } catch (e) {
+    if (hit) return hit.d; // 오래된 값이라도 표시
+    throw e;
+  }
+}
+const AIR_TTL = 30 * 60 * 1000; // 대기질 모델은 1시간 단위로 갱신되므로 30분 캐시
+
 async function fetchAir({ latitude, longitude }) {
   const params = new URLSearchParams({ latitude, longitude, current: "pm10,pm2_5", timezone: "auto" });
-  const res = await fetch(`${AIR_URL}?${params}`);
-  if (!res.ok) throw new Error("미세먼지 정보를 가져오지 못했습니다.");
-  return (await res.json()).current;
+  return (await cachedJson(`${AIR_URL}?${params}`, AIR_TTL)).current;
 }
 
 function setDust(id, metric, v) {
