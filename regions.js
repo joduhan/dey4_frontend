@@ -55,3 +55,6 @@ const hasHangul = (s) => /[ㄱ-ㆎ가-힣]/.test(s);
 function stripSuffix(s) {
   return s.replace(/(특별자치도|특별자치시|특별시|광역시|도|시|군|구)$/, "");
 }
+
+// Node(Vercel 서버리스)에서도 같은 목록을 재사용
+if (typeof module !== "undefined") module.exports = { KR_REGIONS };
